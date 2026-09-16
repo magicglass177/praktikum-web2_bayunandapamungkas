@@ -1,0 +1,16 @@
+backend/vendor/
+backend/.env
+backend/storage/
+backend/bootstrap/cache/
+
+frontend/node_modules/
+frontend/dist/
+
+.env
+.env.*
+!.env.example
+
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
