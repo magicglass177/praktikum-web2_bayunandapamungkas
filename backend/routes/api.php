@@ -6,6 +6,7 @@ Route::get('/status', function () {
     return response()->json([
         'status' => 'success',
         'message' => 'Laravel API berjalan',
-        'framework' => 'Laravel'
+        'framework' => 'Laravel',
+        'version' => '13.x',
     ]);
 });
