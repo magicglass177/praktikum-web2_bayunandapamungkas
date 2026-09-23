@@ -14,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         //
     })
-    ->withExceptions(function (Exceptions $exceptions): void {
-        //
+    ->withExceptions(function (Illuminate\Foundation\Configuration\Exceptions $exceptions) {
+    $exceptions->shouldRenderJsonWhen(
+        fn (Illuminate\Http\Request $request, \Throwable $e) =>
+            $request->is('api/*') || $request->expectsJson()
+    );
     })->create();
