@@ -725,3 +725,493 @@ docs/notes.md
 ```
 
 README ini menjadi dokumentasi utama penggunaan API v1.
+
+
+# Praktikum Pemrograman Web 2
+
+Repository praktikum Pemrograman Web 2 yang terdiri dari backend Laravel
+dan frontend Vue. Pada latihan ini frontend Vue digunakan untuk
+mempelajari komponen, props, emits, state reaktif, computed, watch,
+slot, lifecycle, validasi form, dan Vue Devtools.
+
+## Identitas
+
+- Nama: Bayu Nanda Pamungkas
+- Mata Kuliah: Pemrograman Web 2
+- Frontend: Vue 3 + Vite
+- Backend: Laravel
+
+---
+
+## Versi Environment Frontend
+
+Versi yang digunakan pada saat pengujian:
+
+| Tools | Versi |
+|---|---|
+| Node.js | v24.21.0 |
+| npm | 11.19.0 |
+| Vue | 3.5.42 |
+| Vite | 8.3.0 |
+| Vue Devtools | 7.7.7 |
+
+---
+
+## Menjalankan Frontend
+
+Masuk ke direktori frontend:
+
+```bash
+cd frontend
+```
+
+Install dependency:
+
+```bash
+npm install
+```
+
+Menjalankan development server:
+
+```bash
+npm run dev
+```
+
+Melakukan production build:
+
+```bash
+npm run build
+```
+
+Jika PowerShell Windows memblokir `npm.ps1`, perintah dapat dijalankan
+menggunakan:
+
+```powershell
+npm.cmd install
+npm.cmd run dev
+npm.cmd run build
+```
+
+---
+
+## Struktur Komponen Frontend
+
+Struktur utama source frontend:
+
+```text
+frontend/
+└── src/
+    ├── components/
+    │   ├── BasePanel.vue
+    │   ├── TicketCard.vue
+    │   ├── TicketFilter.vue
+    │   ├── TicketForm.vue
+    │   ├── TicketList.vue
+    │   └── TicketStatus.vue
+    ├── App.vue
+    └── data.js
+```
+
+Hubungan komponen secara sederhana:
+
+```text
+App
+├── BasePanel
+│   ├── TicketFilter
+│   └── TicketList
+│       └── TicketCard
+│           └── TicketStatus
+│
+└── BasePanel
+    └── TicketForm
+```
+
+`App.vue` bertindak sebagai pemilik state utama. Data diteruskan ke
+child melalui props, sedangkan child berkomunikasi kembali ke parent
+melalui event.
+
+---
+
+## Props dan Emits
+
+| Komponen | Props | Emits |
+|---|---|---|
+| `BasePanel` | `title` | - |
+| `TicketFilter` | `modelValue` | `update:modelValue` |
+| `TicketList` | `tickets`, `categories` | `advance` |
+| `TicketCard` | `ticket`, `categoryName` | `advance` |
+| `TicketStatus` | `status` | - |
+| `TicketForm` | `categories` | `submit` |
+
+Alur utama komunikasi komponen:
+
+```text
+Props turun:
+
+App
+ ↓
+TicketList
+ ↓
+TicketCard
+ ↓
+TicketStatus
+
+Event naik:
+
+TicketCard
+ ↑ advance(id)
+TicketList
+ ↑ advance(id)
+App
+```
+
+Untuk form:
+
+```text
+App
+ ↓ categories
+TicketForm
+
+TicketForm
+ ↑ submit(payload)
+App
+```
+
+---
+
+## Ownership State
+
+State utama tiket dimiliki oleh `App.vue`.
+
+State yang digunakan antara lain:
+
+```text
+tickets
+selectedStatus
+showForm
+formVersion
+message
+lastSubmission
+```
+
+`filteredTickets` merupakan data turunan yang dibuat menggunakan
+`computed`.
+
+Child component tidak mengubah `tickets` secara langsung.
+
+Perubahan status dilakukan oleh parent melalui `advanceTicket(id)`,
+sedangkan penambahan tiket dilakukan melalui `addTicket(payload)`.
+
+Dengan demikian prinsip yang digunakan adalah:
+
+```text
+Props turun → Event naik → Parent mengubah state
+```
+
+Tidak digunakan operasi mutasi terhadap props seperti:
+
+```text
+props.tickets.push(...)
+props.tickets.splice(...)
+props.tickets.sort(...)
+props.ticket.status = ...
+```
+
+---
+
+## Filter Tiket
+
+Filter status memiliki pilihan:
+
+- Semua
+- Terbuka
+- Diproses
+- Selesai
+
+Filter menggunakan `computed` berdasarkan `selectedStatus`.
+
+Perubahan filter hanya mengubah tiket yang ditampilkan dan tidak
+mengubah array `tickets`.
+
+Pada data awal terdapat:
+
+```text
+Total     : 3
+Terbuka   : 1
+Diproses  : 1
+Selesai   : 1
+```
+
+---
+
+## Form Tiket
+
+`TicketForm` menggunakan `reactive` untuk menyimpan draft form.
+
+Field yang digunakan:
+
+- Judul
+- Uraian
+- Kategori
+- Mendesak
+- Catatan awal
+
+Saat submit, form membuat object payload baru dan mengirimkannya ke
+parent menggunakan event:
+
+```text
+submit(payload)
+```
+
+Parent kemudian melakukan validasi kembali sebelum tiket dimasukkan ke
+state lokal.
+
+Tiket baru memiliki status awal:
+
+```text
+open
+```
+
+Setelah submit berhasil:
+
+- tiket ditambahkan;
+- filter dikembalikan ke `all`;
+- `lastSubmission` menyimpan salinan payload;
+- `formVersion` bertambah;
+- `TicketForm` dibuat ulang;
+- draft form menjadi kosong.
+
+---
+
+## Batas Validasi Frontend
+
+Batas karakter yang digunakan:
+
+| Field | Batas Maksimal |
+|---|---:|
+| Judul / Subject | 150 karakter |
+| Uraian / Description | 5000 karakter |
+| Catatan / Note | 1000 karakter |
+
+Judul, uraian, kategori, dan catatan wajib valid sebelum payload
+dikirim.
+
+Input yang hanya berisi spasi ditolak karena nilai string diproses
+menggunakan `trim()`.
+
+`category_id` dikonversi menjadi number sebelum dikirim:
+
+```text
+Number(form.category_id)
+```
+
+Checkbox `is_urgent` menghasilkan nilai boolean `true` atau `false`.
+
+Validasi pada latihan ini merupakan validasi frontend dan tidak boleh
+dianggap sebagai pengganti validasi server ketika aplikasi nantinya
+terhubung dengan backend.
+
+---
+
+## Reset dan Lifecycle Form
+
+Form ditampilkan menggunakan `v-if`.
+
+Ketika form ditutup:
+
+```text
+showForm = false
+```
+
+`TicketForm` di-unmount sehingga draft lokal hilang.
+
+Ketika form dibuka kembali, instance `TicketForm` baru dibuat.
+
+`onMounted` digunakan untuk memberikan fokus ke input judul.
+
+Setelah submit berhasil, parent menaikkan:
+
+```text
+formVersion
+```
+
+Nilai tersebut digunakan sebagai `key` pada `TicketForm`, sehingga
+form di-remount setelah parent berhasil menerima payload.
+
+---
+
+## Watch
+
+`watch` digunakan untuk mengamati jumlah seluruh tiket.
+
+Judul tab mengikuti:
+
+```text
+Helpdesk latihan (jumlah tiket)
+```
+
+Contoh:
+
+```text
+3 tiket → Helpdesk latihan (3)
+4 tiket → Helpdesk latihan (4)
+```
+
+Mengubah filter tidak mengubah angka pada judul tab karena watcher
+mengamati `tickets.length`, bukan jumlah `filteredTickets`.
+
+---
+
+## Slot dan Reusable Component
+
+`BasePanel` menggunakan:
+
+- prop `title`;
+- default slot;
+- named slot `footer`.
+
+Komponen yang sama digunakan untuk panel daftar tiket dan panel form
+tiket dengan isi, judul, dan footer yang berbeda.
+
+`TicketStatus` juga digunakan kembali pada setiap `TicketCard` dengan
+nilai status yang berbeda.
+
+Status yang tersedia:
+
+```text
+open    → Terbuka
+pending → Diproses
+closed  → Selesai
+```
+
+---
+
+## Hasil Test Case
+
+Pengujian dilakukan menggunakan UI aplikasi, Vue Devtools, browser
+Console, dan terminal.
+
+| TC | Pengujian | Hasil |
+|---|---|---|
+| TC-01 | Data awal | Lulus |
+| TC-02 | Filter status | Lulus |
+| TC-03 | Perubahan status | Lulus |
+| TC-04 | Status closed | Lulus |
+| TC-05 | Empty state | Lulus |
+| TC-06 | Draft terpisah | Lulus |
+| TC-07 | Submit sah | Lulus |
+| TC-08 | Payload terpisah | Lulus |
+| TC-09 | Input kosong/spasi | Lulus |
+| TC-10 | Batas karakter | Lulus |
+| TC-11 | Kategori/checkbox | Lulus |
+| TC-12 | Lifecycle | Lulus |
+| TC-13 | Slot/reuse | Lulus |
+| TC-14 | Watch/refresh | Lulus |
+| TC-15 | Audit props | Lulus |
+| TC-16 | Build/console | Lulus |
+
+> Status di atas berlaku berdasarkan hasil pengujian aktual. Jika suatu
+> test case menghasilkan perilaku berbeda, status harus disesuaikan
+> menjadi Gagal dan hasil aktual dicatat.
+
+---
+
+## Vue Devtools
+
+Pengujian komponen dilakukan menggunakan:
+
+```text
+Vue Devtools 7.7.7
+```
+
+Vue Devtools digunakan untuk memeriksa:
+
+- state `tickets`;
+- `selectedStatus`;
+- `filteredTickets`;
+- `showForm`;
+- `formVersion`;
+- `lastSubmission`;
+- props pada `TicketCard`;
+- struktur dan reuse komponen.
+
+Pada pengujian event, alur perubahan status adalah:
+
+```text
+TicketCard
+    ↓ emit advance(id)
+
+TicketList
+    ↓ relay advance(id)
+
+App
+    ↓ advanceTicket(id)
+
+tickets
+    ↓
+
+props baru diteruskan ke child
+```
+
+Terdapat dua emit karena event melewati dua batas komponen, tetapi
+perubahan state tiket hanya dilakukan satu kali oleh `App`.
+
+---
+
+## Keamanan Rendering Teks
+
+Data tiket ditampilkan menggunakan interpolasi Vue:
+
+```vue
+{{ props.ticket.subject }}
+```
+
+Input seperti:
+
+```text
+<b>uji</b>
+```
+
+ditampilkan sebagai teks literal dan tidak dirender sebagai HTML aktif.
+
+---
+
+## Penyimpanan Data
+
+Data tiket pada latihan frontend ini **hanya disimpan di memori**.
+
+Data awal berasal dari:
+
+```text
+src/data.js
+```
+
+Karena belum menggunakan persistent storage, refresh browser akan
+mengembalikan state ke data awal.
+
+Sebagai contoh:
+
+```text
+3 tiket awal
+    ↓
+tambah tiket
+    ↓
+4 tiket
+    ↓
+refresh browser
+    ↓
+3 tiket awal
+```
+
+---
+
+## Integrasi Backend
+
+Frontend Vue pada latihan ini **belum terhubung dengan API backend**.
+
+Data tiket yang digunakan masih merupakan data lokal dari `data.js`.
+Oleh karena itu, fitur pada latihan ini tidak diklaim sebagai integrasi
+Laravel API.
+
+Integrasi backend dapat dikembangkan pada tahap berikutnya dengan tetap
+mempertahankan validasi server dan ownership data yang sesuai.
