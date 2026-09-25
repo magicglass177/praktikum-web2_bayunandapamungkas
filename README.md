@@ -1215,3 +1215,645 @@ Laravel API.
 
 Integrasi backend dapat dikembangkan pada tahap berikutnya dengan tetap
 mempertahankan validasi server dan ownership data yang sesuai.
+
+
+# Praktikum Web 2 — SPA Helpdesk
+
+Repository ini merupakan proyek praktikum mata kuliah **Pemrograman Web 2** yang mengimplementasikan aplikasi **Helpdesk berbasis Single Page Application (SPA)** menggunakan Laravel sebagai backend API dan Vue.js sebagai frontend.
+
+Aplikasi menerapkan autentikasi berbasis session, Vue Router, Pinia, konsumsi REST API menggunakan Axios, authorization/ownership tiket, penanganan error, pembatalan stale request, serta pengujian SPA.
+
+---
+
+## 1. Teknologi dan Versi
+
+### Backend
+
+- Laravel Framework 13.32.0
+- PHP 8.3.32
+- Laravel Sanctum
+- Laravel Session Authentication
+
+### Frontend
+
+- Vue 3.5.42
+- Vue Router 4.6.4
+- Pinia 3.0.4
+- Axios 1.20.0
+- Vite 8.3.0
+- @vitejs/plugin-vue 6.0.9
+
+---
+
+## 2. Struktur Proyek
+
+```text
+praktikum-web2_bayunandapamungkas/
+├── backend/
+│   ├── app/
+│   ├── bootstrap/
+│   ├── config/
+│   ├── database/
+│   ├── routes/
+│   └── ...
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── composables/
+│   │   ├── layouts/
+│   │   ├── router/
+│   │   ├── stores/
+│   │   └── views/
+│   └── ...
+│
+└── README.md
+```
+
+Backend dan frontend dijalankan secara terpisah selama development.
+
+---
+
+## 3. Instalasi Backend
+
+Masuk ke folder backend:
+
+```powershell
+cd backend
+```
+
+Install dependency:
+
+```powershell
+composer install
+```
+
+Salin environment example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Generate application key:
+
+```powershell
+php artisan key:generate
+```
+
+Sesuaikan konfigurasi database pada `.env`, kemudian jalankan migration:
+
+```powershell
+php artisan migrate
+```
+
+Jalankan backend menggunakan host `localhost`:
+
+```powershell
+php artisan serve --host=localhost --port=8000
+```
+
+Backend dapat diakses melalui:
+
+```text
+http://localhost:8000
+```
+
+> Jangan commit file `.env` karena dapat berisi konfigurasi lokal atau data rahasia.
+
+---
+
+## 4. Session Authentication dan CORS
+
+Aplikasi menggunakan autentikasi berbasis **Laravel session/Sanctum**, bukan menyimpan bearer token pada frontend.
+
+Konfigurasi development menggunakan origin:
+
+```text
+Frontend : http://localhost:5173
+Backend  : http://localhost:8000
+```
+
+Contoh konfigurasi environment backend:
+
+```dotenv
+APP_URL=http://localhost:8000
+
+SANCTUM_STATEFUL_DOMAINS=localhost:5173
+
+SESSION_DRIVER=file
+SESSION_DOMAIN=null
+SESSION_SECURE_COOKIE=false
+SESSION_SAME_SITE=lax
+```
+
+Middleware stateful API diaktifkan pada `bootstrap/app.php`.
+
+CORS mengizinkan origin frontend:
+
+```text
+http://localhost:5173
+```
+
+dengan `supports_credentials` diaktifkan agar session cookie dapat digunakan pada request frontend ke backend.
+
+Untuk request yang mengubah data, frontend terlebih dahulu memperoleh CSRF cookie melalui:
+
+```text
+GET /sanctum/csrf-cookie
+```
+
+---
+
+## 5. Instalasi Frontend
+
+Masuk ke folder frontend:
+
+```powershell
+cd frontend
+```
+
+Install dependency:
+
+```powershell
+npm install
+```
+
+Buat `.env.local`:
+
+```dotenv
+VITE_BACKEND_URL=http://localhost:8000
+```
+
+Jalankan development server:
+
+```powershell
+npm run dev
+```
+
+Frontend berjalan pada:
+
+```text
+http://localhost:5173
+```
+
+Production build dapat diuji dengan:
+
+```powershell
+npm run build
+```
+
+Hasil pengujian build:
+
+```text
+✓ 102 modules transformed.
+✓ built in 642ms
+```
+
+File `.env.local`, `node_modules`, dan `dist` tidak digunakan sebagai file yang di-commit ke repository.
+
+---
+
+## 6. Peta Route Frontend
+
+| Route | Fungsi | Proteksi |
+|---|---|---|
+| `/` | Redirect ke daftar tiket | - |
+| `/login` | Halaman login | Guest |
+| `/tickets` | Daftar tiket | Login |
+| `/tickets/new` | Membuat tiket | Login |
+| `/tickets/:id` | Detail tiket | Login |
+| `/session-error` | Gagal memeriksa session | - |
+| `/:pathMatch(.*)*` | SPA 404 | - |
+
+Route `/tickets` menggunakan nested route dengan `HelpdeskLayout`.
+
+Route yang membutuhkan autentikasi menggunakan:
+
+```text
+meta.requiresAuth
+```
+
+dan diperiksa melalui navigation guard Vue Router.
+
+---
+
+## 7. Diagram Navigasi
+
+```text
+                    ┌─────────────┐
+                    │    Login    │
+                    └──────┬──────┘
+                           │
+                     Login berhasil
+                           │
+                           ▼
+                 ┌───────────────────┐
+                 │   /tickets        │
+                 │   Daftar Tiket    │
+                 └─────┬────────┬────┘
+                       │        │
+              pilih tiket      buat tiket
+                       │        │
+                       ▼        ▼
+              ┌────────────┐  ┌────────────────┐
+              │ /tickets/:id│  │ /tickets/new   │
+              │ Detail      │  │ Form Tiket     │
+              └────────────┘  └────────────────┘
+
+Protected Route
+      │
+      ▼
+Periksa /api/v1/me
+      │
+ ┌────┴────┐
+ │         │
+200       401
+ │         │
+ ▼         ▼
+Route     /login
+tujuan
+```
+
+Nested route membuat navbar Helpdesk tetap tersedia ketika pengguna berpindah antara daftar, detail, dan form tiket.
+
+---
+
+## 8. Alur Login dan Request
+
+```text
+Pengguna
+   │
+   ▼
+GET /sanctum/csrf-cookie
+   │
+   ▼
+POST /login
+   │
+   ├── 200 → user disimpan pada Pinia
+   │
+   └── 401 → tampilkan pesan login gagal
+   │
+   ▼
+Vue Router
+   │
+   ▼
+Protected Route
+   │
+   ▼
+GET /api/v1/me
+   │
+   ├── 200 → session valid
+   │
+   └── 401 → kembali ke /login
+   │
+   ▼
+Request API Tiket
+   │
+   ├── 200/201 → tampilkan data
+   ├── 403 → tidak memiliki hak akses
+   ├── 404 → data tidak ditemukan
+   ├── 419 → masalah CSRF/session
+   ├── 422 → validation error
+   ├── 429 → rate limit
+   └── 5xx/network → tampilkan error/retry
+```
+
+---
+
+## 9. Kontrak API
+
+### Authentication
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| GET | `/sanctum/csrf-cookie` | Mengambil CSRF cookie |
+| POST | `/login` | Login menggunakan session |
+| POST | `/logout` | Logout dan invalidasi session |
+| GET | `/api/v1/me` | Mengambil user yang sedang login |
+
+### Ticket
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| GET | `/api/v1/tickets` | Daftar tiket |
+| GET | `/api/v1/tickets/{id}` | Detail tiket |
+| POST | `/api/v1/tickets` | Membuat tiket |
+| PUT/PATCH | `/api/v1/tickets/{id}` | Memperbarui tiket |
+| DELETE | `/api/v1/tickets/{id}` | Menghapus tiket |
+
+### Category
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| GET | `/api/v1/categories` | Daftar kategori |
+
+Contoh response tiket menggunakan struktur:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "subject": "Contoh tiket",
+    "description": "Deskripsi tiket",
+    "status": "open",
+    "is_urgent": false,
+    "owner": {
+      "id": 1,
+      "name": "User"
+    },
+    "category": {
+      "id": 1,
+      "name": "Akun"
+    }
+  }
+}
+```
+
+---
+
+## 10. Ownership dan Authorization
+
+Route guard frontend tidak menggantikan authorization backend.
+
+Vue Router hanya menentukan apakah pengguna dapat mengakses halaman yang membutuhkan autentikasi.
+
+Laravel Policy tetap digunakan untuk menentukan apakah user memiliki hak terhadap resource tertentu.
+
+Contohnya:
+
+```text
+Ani → tiket milik Ani   → diizinkan
+Ani → tiket milik Budi  → 403 Forbidden
+```
+
+Dengan demikian, meskipun request dikirim langsung ke API tanpa melalui Vue Router, aturan ownership tetap diterapkan oleh backend.
+
+---
+
+## 11. Ownership State Frontend
+
+Pinia digunakan hanya untuk state autentikasi:
+
+```text
+user
+ready
+```
+
+Data tiket, draft form, loading state, dan validation error tidak disimpan sebagai global state.
+
+State tersebut ditempatkan pada halaman/composable yang membutuhkannya.
+
+Contoh state lokal form:
+
+```text
+subject
+description
+category_id
+is_urgent
+note
+errors
+```
+
+Frontend juga tidak menyimpan password atau bearer token pada Local Storage maupun Session Storage.
+
+---
+
+## 12. Loading, Empty, Error, dan Success State
+
+Frontend membedakan beberapa kondisi request.
+
+### Loading
+
+Ketika request sedang berjalan:
+
+```text
+Memuat data...
+```
+
+### Empty
+
+Request berhasil tetapi tidak memiliki data:
+
+```text
+Belum ada data untuk halaman ini.
+```
+
+### Error
+
+Error API diterjemahkan menjadi pesan yang sesuai.
+
+| Status | Penanganan |
+|---|---|
+| 401 | Session berakhir / login kembali |
+| 403 | Tidak memiliki hak akses |
+| 404 | Data tidak ditemukan |
+| 419 | CSRF/session tidak cocok |
+| 422 | Validation error |
+| 429 | Terlalu banyak request |
+| 5xx | Server bermasalah |
+| Network | Tidak dapat menghubungi API |
+
+Untuk GET, pengguna dapat menggunakan tombol:
+
+```text
+Coba lagi
+```
+
+Sedangkan POST yang gagal karena timeout/network tidak langsung dikirim ulang karena hasil penyimpanan pada server mungkin belum diketahui.
+
+Frontend menampilkan peringatan:
+
+```text
+Hasil simpan belum pasti. Periksa daftar sebelum mengirim ulang.
+```
+
+---
+
+## 13. AbortController dan Stale Request
+
+Request GET menggunakan `AbortController` dan sequence untuk mencegah hasil request lama menimpa hasil request terbaru.
+
+Contoh kondisi:
+
+```text
+Request A dimulai
+      │
+      ├── pengguna pindah ke B
+      │
+      ▼
+Request A dibatalkan
+Request B dimulai
+      │
+      ▼
+UI menampilkan hasil B
+```
+
+Abort pada browser tidak menjamin transaksi yang sudah diterima server ikut dibatalkan. Karena itu mekanisme ini terutama digunakan untuk menjaga konsistensi state UI.
+
+---
+
+## 14. Menyiapkan Akun dan Data Pengujian
+
+Pengujian menggunakan minimal dua akun latihan, misalnya:
+
+```text
+User A / Ani
+User B / Budi
+```
+
+Kedua akun memiliki tiket masing-masing sehingga ownership dapat diuji.
+
+Data pengujian juga perlu mencakup:
+
+- Akun yang memiliki tiket.
+- Akun tanpa tiket untuk empty state.
+- Minimal 6 tiket untuk pagination.
+- Tiket milik user lain untuk pengujian 403.
+- ID tiket yang tidak tersedia untuk pengujian 404.
+
+Password dan informasi rahasia akun tidak dituliskan pada README atau bukti screenshot.
+
+---
+
+## 15. Hasil Pengujian TC-01 sampai TC-22
+
+| TC | Pengujian | Hasil | Jenis |
+|---|---|---|---|
+| TC-01 | Guest dan Route Guard | Lulus | Server nyata |
+| TC-02 | Login salah | Lulus | Server nyata |
+| TC-03 | Refresh session | Lulus | Server nyata |
+| TC-04 | Restore gagal jaringan | Lulus | Server nyata |
+| TC-05 | Nested route | Lulus | Server nyata |
+| TC-06 | SPA 404 | Lulus | Server nyata |
+| TC-07 | Loading state | Lulus | Server nyata |
+| TC-08 | Empty state | Lulus | Server nyata + Mock |
+| TC-09 | Pagination | Lulus | Server nyata |
+| TC-10 | Race dan pembatalan request | Lulus | Server nyata |
+| TC-11 | Unmount/cancel request | Lulus | Server nyata |
+| TC-12 | Forbidden 403 | Lulus | Server nyata |
+| TC-13 | API 404 | Lulus | Server nyata |
+| TC-14 | Validation 422 | Lulus | Server nyata |
+| TC-15 | Create 201 dan klik ganda | Lulus | Server nyata |
+| TC-16 | 401 setelah login | Lulus | Server nyata |
+| TC-17 | CSRF 419 | Lulus | Server nyata |
+| TC-18 | Rate limit 429 | Lulus | Server nyata |
+| TC-19 | Offline/5xx dan Retry GET | Lulus | Server nyata + Mock |
+| TC-20 | POST tidak pasti | Lulus | Server nyata |
+| TC-21 | Logout | Lulus | Server nyata |
+| TC-22 | Audit state dan production build | Lulus | Audit kode + Server nyata |
+
+Pengujian dilakukan menggunakan browser DevTools, Network panel, Vue/Pinia DevTools, server nyata, serta controlled mock pada skenario tertentu.
+
+Mock digunakan secara terkontrol dan tidak dipertahankan pada kode produksi.
+
+---
+
+## 16. Bukti UI dan DevTools
+
+Bukti pengujian mencakup:
+
+- State Pinia.
+- Nested route.
+- Loading state.
+- Empty state.
+- Error dan retry.
+- Success state.
+- Network request dan HTTP status yang relevan.
+- Production build.
+- Dependency versions.
+
+Screenshot bukti tidak menampilkan password, cookie, session ID, atau informasi rahasia lainnya.
+
+---
+
+## 17. Diagnosis Terarah
+
+Beberapa diagnosis yang digunakan selama pengembangan:
+
+- **CORS:** periksa origin, port, credentials, OPTIONS, dan `X-XSRF-TOKEN`.
+- **401:** periksa host, stateful domains, cookie, session driver, dan `auth:sanctum`.
+- **419:** periksa CSRF cookie dan XSRF header.
+- **404:** bedakan SPA route tidak ditemukan dengan API resource tidak ditemukan.
+- **Loading tidak selesai:** periksa catch, timeout, dan kontrak response API.
+- **Data tidak sesuai:** periksa `response.data`, `response.data.data`, parameter route, abort, dan sequence.
+
+---
+
+## 18. Catatan Deployment
+
+Frontend menggunakan:
+
+```js
+createWebHistory()
+```
+
+Pada development, Vite menangani route SPA.
+
+Pada deployment production, web server frontend perlu dikonfigurasi agar route frontend seperti:
+
+```text
+/tickets
+/tickets/new
+/tickets/123
+```
+
+melakukan fallback ke:
+
+```text
+index.html
+```
+
+sehingga Vue Router dapat menangani URL tersebut.
+
+Endpoint backend seperti:
+
+```text
+/api/*
+/login
+/logout
+/sanctum/*
+```
+
+tidak boleh diarahkan ke fallback frontend dan harus tetap diproses oleh Laravel jika menggunakan reverse proxy satu origin.
+
+Konfigurasi HTTPS, cookie, domain, CORS, dan Sanctum juga perlu disesuaikan dengan domain production.
+
+Deployment production bukan luaran wajib pada praktikum ini.
+
+---
+
+## 19. Refleksi
+
+Dari praktikum ini dapat dipahami bahwa SPA tidak hanya membutuhkan routing pada frontend, tetapi juga autentikasi dan authorization yang tetap diamankan oleh backend.
+
+Vue Router digunakan untuk navigasi dan route guard, Pinia digunakan untuk state identitas pengguna, sedangkan Laravel Policy menjaga ownership resource.
+
+Pengujian juga menunjukkan pentingnya membedakan loading, empty, error, dan success state serta menangani request yang gagal, stale request, session berakhir, CSRF, validation error, rate limit, dan kegagalan jaringan.
+
+GET relatif aman untuk di-retry, sedangkan POST yang hasilnya belum diketahui harus diperiksa terlebih dahulu untuk mencegah data duplikat.
+
+---
+
+## 20. Catatan Repository
+
+Sebelum melakukan commit, perubahan diperiksa menggunakan:
+
+```powershell
+git status
+git diff
+```
+
+File atau data berikut tidak boleh dimasukkan ke repository:
+
+```text
+backend/.env
+frontend/.env.local
+node_modules/
+dist/
+cookie/session
+password
+data rahasia lainnya
+```
+
+Commit dilakukan secara bertahap sesuai perubahan fitur, perbaikan, dan dokumentasi.
