@@ -1,42 +1,31 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\SessionController;
+
+// use App\Http\Controllers\TicketController;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
-Route::post('/login', function (Request $request) {
-    $credentials = $request->validate([
-        'email' => ['required', 'email'],
-        'password' => ['required', 'string'],
-    ]);
+Route::post('/login', [SessionController::class, 'login'])
+    ->middleware('throttle:api-login');
 
-    if (! Auth::attempt($credentials)) {
-        return response()->json([
-            'message' => 'Kredensial tidak valid.',
-        ], 401);
-    }
+Route::post('/logout', [SessionController::class, 'logout'])
+    ->middleware('auth:web');
 
-    $request->session()->regenerate();
+// Route::get('/tickets', [TicketController::class, 'index'])
+//     ->name('tickets.index');
 
-    return response()->json([
-        'data' => [
-            'id' => $request->user()->id,
-            'name' => $request->user()->name,
-        ],
-    ]);
-})->middleware('throttle:api-login')->name('login');
+// Route::get('/tickets/{ticket}', [TicketController::class, 'show'])
+//     ->whereNumber('ticket')
+//     ->name('tickets.show');
 
-Route::post('/logout', function (Request $request) {
-    Auth::guard('web')->logout();
+// Route::get('/api/tickets/{ticket}', [TicketController::class, 'showJson'])
+//     ->whereNumber('ticket')
+//     ->name('tickets.show-json');
 
-    $request->session()->invalidate();
-    $request->session()->regenerateToken();
+// Route::pattern('ticket', '[0-9]+');
 
-    return response()->noContent();
-})->middleware('auth')->name('logout');
-
-
+// Route::resource('tickets', TicketController::class);
